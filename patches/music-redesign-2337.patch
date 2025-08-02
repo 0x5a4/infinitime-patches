@@ -1,0 +1,954 @@
+From 3a79fc6ff78465ced19020432cc6367f40ca5a04 Mon Sep 17 00:00:00 2001
+From: Titus Kendzorra <titus@kendzorra.de>
+Date: Mon, 12 May 2025 01:22:05 +0200
+Subject: [PATCH 01/16] music app redesign
+
+---
+ src/displayapp/screens/Music.cpp | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/src/displayapp/screens/Music.cpp b/src/displayapp/screens/Music.cpp
+index 0763da0fe3..0369f28a38 100644
+--- a/src/displayapp/screens/Music.cpp
++++ b/src/displayapp/screens/Music.cpp
+@@ -23,6 +23,8 @@
+ #include "displayapp/icons/music/disc.c"
+ #include "displayapp/icons/music/disc_f_1.c"
+ #include "displayapp/icons/music/disc_f_2.c"
++#include "displayapp/InfiniTimeTheme.h"
++
+ 
+ using namespace Pinetime::Applications::Screens;
+ 
+@@ -52,7 +54,7 @@ Music::Music(Pinetime::Controllers::MusicService& music) : musicService(music) {
+ 
+   lv_style_init(&btn_style);
+   lv_style_set_radius(&btn_style, LV_STATE_DEFAULT, 20);
+-  lv_style_set_bg_color(&btn_style, LV_STATE_DEFAULT, LV_COLOR_AQUA);
++  lv_style_set_bg_color(&btn_style, LV_STATE_DEFAULT, Colors::bgAlt);
+   lv_style_set_bg_opa(&btn_style, LV_STATE_DEFAULT, LV_OPA_50);
+ 
+   btnVolDown = lv_btn_create(lv_scr_act(), nullptr);
+@@ -114,15 +116,15 @@ Music::Music(Pinetime::Controllers::MusicService& music) : musicService(music) {
+   constexpr int8_t MIDDLE_OFFSET = -25;
+   txtArtist = lv_label_create(lv_scr_act(), nullptr);
+   lv_label_set_long_mode(txtArtist, LV_LABEL_LONG_SROLL_CIRC);
+-  lv_obj_align(txtArtist, nullptr, LV_ALIGN_IN_LEFT_MID, 12, MIDDLE_OFFSET + 1 * FONT_HEIGHT);
++  lv_obj_align(txtArtist, nullptr, LV_ALIGN_IN_LEFT_MID, 12, MIDDLE_OFFSET + 2 * FONT_HEIGHT + LINE_PAD);
+   lv_label_set_align(txtArtist, LV_ALIGN_IN_LEFT_MID);
+   lv_obj_set_width(txtArtist, LV_HOR_RES - 12);
+   lv_label_set_text_static(txtArtist, "Artist Name");
++  lv_obj_set_style_local_text_color(txtArtist, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::lightGray);
+ 
+   txtTrack = lv_label_create(lv_scr_act(), nullptr);
+   lv_label_set_long_mode(txtTrack, LV_LABEL_LONG_SROLL_CIRC);
+-  lv_obj_align(txtTrack, nullptr, LV_ALIGN_IN_LEFT_MID, 12, MIDDLE_OFFSET + 2 * FONT_HEIGHT + LINE_PAD);
+-
++  lv_obj_align(txtTrack, nullptr, LV_ALIGN_IN_LEFT_MID, 12, MIDDLE_OFFSET + 1 * FONT_HEIGHT);
+   lv_label_set_align(txtTrack, LV_ALIGN_IN_LEFT_MID);
+   lv_obj_set_width(txtTrack, LV_HOR_RES - 12);
+   lv_label_set_text_static(txtTrack, "This is a very long getTrack name");
+
+From e97cb58fbbeb1f2cc283b93a9ba2f5277a6e4a39 Mon Sep 17 00:00:00 2001
+From: Titus Kendzorra <titus@kendzorra.de>
+Date: Mon, 12 May 2025 19:25:30 +0200
+Subject: [PATCH 03/16] Some tweaks for the default texts, as well as adding a
+ different approach to switching between skipping and volume buttons
+
+---
+ .vscode/settings.json             |  4 +++-
+ src/components/ble/MusicService.h |  6 +++---
+ src/displayapp/screens/Music.cpp  | 36 ++++++++++++++++++-------------
+ src/displayapp/screens/Music.h    |  8 +++++--
+ 4 files changed, 33 insertions(+), 21 deletions(-)
+
+diff --git a/.vscode/settings.json b/.vscode/settings.json
+index a7b04eea3c..70643b0798 100644
+--- a/.vscode/settings.json
++++ b/.vscode/settings.json
+@@ -65,6 +65,8 @@
+         "stdexcept": "cpp",
+         "streambuf": "cpp",
+         "cinttypes": "cpp",
+-        "typeinfo": "cpp"
++        "typeinfo": "cpp",
++        "ios": "cpp",
++        "disc.c": "cpp"
+     }
+ }
+diff --git a/src/components/ble/MusicService.h b/src/components/ble/MusicService.h
+index 93d94a346e..9257e13514 100644
+--- a/src/components/ble/MusicService.h
++++ b/src/components/ble/MusicService.h
+@@ -71,9 +71,9 @@ namespace Pinetime {
+ 
+       uint16_t eventHandle {};
+ 
+-      std::string artistName {"Waiting for"};
+-      std::string albumName {};
+-      std::string trackName {"track information.."};
++      std::string trackName {""};
++      std::string albumName {""};
++      std::string artistName {"Not Playing"};
+ 
+       bool playing {false};
+ 
+diff --git a/src/displayapp/screens/Music.cpp b/src/displayapp/screens/Music.cpp
+index 6be76fb010..e7d7b1cf6c 100644
+--- a/src/displayapp/screens/Music.cpp
++++ b/src/displayapp/screens/Music.cpp
+@@ -48,7 +48,9 @@ inline void lv_img_set_src_arr(lv_obj_t* img, const lv_img_dsc_t* src_img) {
+  *
+  * TODO: Investigate Apple Media Service and AVRCPv1.6 support for seamless integration
+  */
+-Music::Music(Pinetime::Controllers::MusicService& music) : musicService(music) {
++Music::Music(Pinetime::Controllers::MusicService& music,
++             Pinetime::Controllers::MotorController& motor)
++    : musicService(music), motor(motor) {
+   lv_obj_t* label;
+ 
+   lv_style_init(&btn_style);
+@@ -118,7 +120,7 @@ Music::Music(Pinetime::Controllers::MusicService& music) : musicService(music) {
+   lv_obj_align(txtArtist, nullptr, LV_ALIGN_IN_LEFT_MID, 12, MIDDLE_OFFSET + 2 * FONT_HEIGHT + LINE_PAD);
+   lv_label_set_align(txtArtist, LV_ALIGN_IN_LEFT_MID);
+   lv_obj_set_width(txtArtist, LV_HOR_RES - 12);
+-  lv_label_set_text_static(txtArtist, "Artist Name");
++  lv_label_set_text_static(txtArtist, "");
+   lv_obj_set_style_local_text_color(txtArtist, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::lightGray);
+ 
+   txtTrack = lv_label_create(lv_scr_act(), nullptr);
+@@ -126,7 +128,7 @@ Music::Music(Pinetime::Controllers::MusicService& music) : musicService(music) {
+   lv_obj_align(txtTrack, nullptr, LV_ALIGN_IN_LEFT_MID, 12, MIDDLE_OFFSET + 1 * FONT_HEIGHT);
+   lv_label_set_align(txtTrack, LV_ALIGN_IN_LEFT_MID);
+   lv_obj_set_width(txtTrack, LV_HOR_RES - 12);
+-  lv_label_set_text_static(txtTrack, "This is a very long getTrack name");
++  lv_label_set_text_static(txtTrack, "");
+ 
+   /** Init animation */
+   imgDisc = lv_img_create(lv_scr_act(), nullptr);
+@@ -250,24 +252,28 @@ void Music::OnObjectEvent(lv_obj_t* obj, lv_event_t event) {
+ }
+ 
+ bool Music::OnTouchEvent(Pinetime::Applications::TouchEvents event) {
+-  switch (event) {
+-    case TouchEvents::SwipeUp: {
+-      lv_obj_set_hidden(btnVolDown, false);
+-      lv_obj_set_hidden(btnVolUp, false);
++  static bool isVolumeMode = false;  // T-flip-flop state
+ 
+-      lv_obj_set_hidden(btnNext, true);
+-      lv_obj_set_hidden(btnPrev, true);
+-      return true;
+-    }
+-    case TouchEvents::SwipeDown: {
+-      if (lv_obj_get_hidden(btnNext)) {
++  switch (event) {
++    case TouchEvents::DoubleTap: {
++      isVolumeMode = !isVolumeMode;  // Toggle state
++
++      if (isVolumeMode) {
++        motor.RunForDuration(35);
++        // Show volume controls, hide track controls
++        lv_obj_set_hidden(btnVolDown, false);
++        lv_obj_set_hidden(btnVolUp, false);
++        lv_obj_set_hidden(btnNext, true);
++        lv_obj_set_hidden(btnPrev, true);
++      } else {
++        motor.RunForDuration(35);
++        // Show track controls, hide volume controls
+         lv_obj_set_hidden(btnNext, false);
+         lv_obj_set_hidden(btnPrev, false);
+         lv_obj_set_hidden(btnVolDown, true);
+         lv_obj_set_hidden(btnVolUp, true);
+-        return true;
+       }
+-      return false;
++      return true;
+     }
+     case TouchEvents::SwipeLeft: {
+       musicService.event(Controllers::MusicService::EVENT_MUSIC_NEXT);
+diff --git a/src/displayapp/screens/Music.h b/src/displayapp/screens/Music.h
+index 522533215b..e9aa2c8bf1 100644
+--- a/src/displayapp/screens/Music.h
++++ b/src/displayapp/screens/Music.h
+@@ -34,7 +34,8 @@ namespace Pinetime {
+     namespace Screens {
+       class Music : public Screen {
+       public:
+-        Music(Pinetime::Controllers::MusicService& music);
++        Music(Pinetime::Controllers::MusicService& music,
++              Pinetime::Controllers::MotorController& motor);
+ 
+         ~Music() override;
+ 
+@@ -82,6 +83,9 @@ namespace Pinetime {
+ 
+         lv_task_t* taskRefresh;
+ 
++        Controllers::MotorController& motor;
++
++
+         /** Watchapp */
+       };
+     }
+@@ -92,7 +96,7 @@ namespace Pinetime {
+       static constexpr const char* icon = Screens::Symbols::music;
+ 
+       static Screens::Screen* Create(AppControllers& controllers) {
+-        return new Screens::Music(*controllers.musicService);
++        return new Screens::Music(*controllers.musicService, controllers.motorController);
+       };
+     };
+   }
+
+From db1a0add8d27e5997babab4d8287d2967c55a7db Mon Sep 17 00:00:00 2001
+From: Titus Kendzorra <titus@kendzorra.de>
+Date: Mon, 12 May 2025 19:28:32 +0200
+Subject: [PATCH 04/16] formatting
+
+---
+ src/displayapp/screens/Music.cpp | 9 ++++-----
+ src/displayapp/screens/Music.h   | 3 +--
+ 2 files changed, 5 insertions(+), 7 deletions(-)
+
+diff --git a/src/displayapp/screens/Music.cpp b/src/displayapp/screens/Music.cpp
+index e7d7b1cf6c..cd3f1af3b8 100644
+--- a/src/displayapp/screens/Music.cpp
++++ b/src/displayapp/screens/Music.cpp
+@@ -48,9 +48,8 @@ inline void lv_img_set_src_arr(lv_obj_t* img, const lv_img_dsc_t* src_img) {
+  *
+  * TODO: Investigate Apple Media Service and AVRCPv1.6 support for seamless integration
+  */
+-Music::Music(Pinetime::Controllers::MusicService& music,
+-             Pinetime::Controllers::MotorController& motor)
+-    : musicService(music), motor(motor) {
++Music::Music(Pinetime::Controllers::MusicService& music, Pinetime::Controllers::MotorController& motor)
++: musicService(music), motor(motor) {
+   lv_obj_t* label;
+ 
+   lv_style_init(&btn_style);
+@@ -252,11 +251,11 @@ void Music::OnObjectEvent(lv_obj_t* obj, lv_event_t event) {
+ }
+ 
+ bool Music::OnTouchEvent(Pinetime::Applications::TouchEvents event) {
+-  static bool isVolumeMode = false;  // T-flip-flop state
++  static bool isVolumeMode = false; // T-flip-flop state
+ 
+   switch (event) {
+     case TouchEvents::DoubleTap: {
+-      isVolumeMode = !isVolumeMode;  // Toggle state
++      isVolumeMode = !isVolumeMode; // Toggle state
+ 
+       if (isVolumeMode) {
+         motor.RunForDuration(35);
+diff --git a/src/displayapp/screens/Music.h b/src/displayapp/screens/Music.h
+index e9aa2c8bf1..4b9992715e 100644
+--- a/src/displayapp/screens/Music.h
++++ b/src/displayapp/screens/Music.h
+@@ -34,8 +34,7 @@ namespace Pinetime {
+     namespace Screens {
+       class Music : public Screen {
+       public:
+-        Music(Pinetime::Controllers::MusicService& music,
+-              Pinetime::Controllers::MotorController& motor);
++        Music(Pinetime::Controllers::MusicService& music, Pinetime::Controllers::MotorController& motor);
+ 
+         ~Music() override;
+ 
+
+From e633015375cd478a1d9f8c26fec74bd6ffb6d651 Mon Sep 17 00:00:00 2001
+From: Titus Kendzorra <titus@kendzorra.de>
+Date: Mon, 12 May 2025 19:30:25 +0200
+Subject: [PATCH 05/16] more formatting
+
+---
+ src/displayapp/screens/Music.cpp | 2 +-
+ src/displayapp/screens/Music.h   | 1 -
+ 2 files changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/src/displayapp/screens/Music.cpp b/src/displayapp/screens/Music.cpp
+index cd3f1af3b8..db2033bce6 100644
+--- a/src/displayapp/screens/Music.cpp
++++ b/src/displayapp/screens/Music.cpp
+@@ -49,7 +49,7 @@ inline void lv_img_set_src_arr(lv_obj_t* img, const lv_img_dsc_t* src_img) {
+  * TODO: Investigate Apple Media Service and AVRCPv1.6 support for seamless integration
+  */
+ Music::Music(Pinetime::Controllers::MusicService& music, Pinetime::Controllers::MotorController& motor)
+-: musicService(music), motor(motor) {
++  : musicService(music), motor(motor) {
+   lv_obj_t* label;
+ 
+   lv_style_init(&btn_style);
+diff --git a/src/displayapp/screens/Music.h b/src/displayapp/screens/Music.h
+index 4b9992715e..924931f3df 100644
+--- a/src/displayapp/screens/Music.h
++++ b/src/displayapp/screens/Music.h
+@@ -84,7 +84,6 @@ namespace Pinetime {
+ 
+         Controllers::MotorController& motor;
+ 
+-
+         /** Watchapp */
+       };
+     }
+
+From ee276b5cd0545bcb9d0bbe4781c50513991f05af Mon Sep 17 00:00:00 2001
+From: Titus Kendzorra <titus@kendzorra.de>
+Date: Wed, 14 May 2025 18:47:32 +0200
+Subject: [PATCH 06/16] revert back to swiping as a gesture to switch between
+ skip and volume buttons
+
+---
+ src/displayapp/screens/Music.cpp | 28 ++++++++++++----------------
+ 1 file changed, 12 insertions(+), 16 deletions(-)
+
+diff --git a/src/displayapp/screens/Music.cpp b/src/displayapp/screens/Music.cpp
+index db2033bce6..3fa2a8c938 100644
+--- a/src/displayapp/screens/Music.cpp
++++ b/src/displayapp/screens/Music.cpp
+@@ -251,28 +251,24 @@ void Music::OnObjectEvent(lv_obj_t* obj, lv_event_t event) {
+ }
+ 
+ bool Music::OnTouchEvent(Pinetime::Applications::TouchEvents event) {
+-  static bool isVolumeMode = false; // T-flip-flop state
+-
+   switch (event) {
+-    case TouchEvents::DoubleTap: {
+-      isVolumeMode = !isVolumeMode; // Toggle state
+-
+-      if (isVolumeMode) {
+-        motor.RunForDuration(35);
+-        // Show volume controls, hide track controls
+-        lv_obj_set_hidden(btnVolDown, false);
+-        lv_obj_set_hidden(btnVolUp, false);
+-        lv_obj_set_hidden(btnNext, true);
+-        lv_obj_set_hidden(btnPrev, true);
+-      } else {
+-        motor.RunForDuration(35);
+-        // Show track controls, hide volume controls
++    case TouchEvents::SwipeUp: {
++      lv_obj_set_hidden(btnVolDown, false);
++      lv_obj_set_hidden(btnVolUp, false);
++
++      lv_obj_set_hidden(btnNext, true);
++      lv_obj_set_hidden(btnPrev, true);
++      return true;
++    }
++    case TouchEvents::SwipeDown: {
++      if (lv_obj_get_hidden(btnNext)) {
+         lv_obj_set_hidden(btnNext, false);
+         lv_obj_set_hidden(btnPrev, false);
+         lv_obj_set_hidden(btnVolDown, true);
+         lv_obj_set_hidden(btnVolUp, true);
++        return true;
+       }
+-      return true;
++      return false;
+     }
+     case TouchEvents::SwipeLeft: {
+       musicService.event(Controllers::MusicService::EVENT_MUSIC_NEXT);
+
+From 43aa9323428eb79218390e1fe2c84a41170a7549 Mon Sep 17 00:00:00 2001
+From: Titus Kendzorra <titus@kendzorra.de>
+Date: Wed, 14 May 2025 18:50:52 +0200
+Subject: [PATCH 07/16] remove all unneccessary references to the motor
+ controller
+
+---
+ src/displayapp/screens/Music.cpp | 4 ++--
+ src/displayapp/screens/Music.h   | 6 ++----
+ 2 files changed, 4 insertions(+), 6 deletions(-)
+
+diff --git a/src/displayapp/screens/Music.cpp b/src/displayapp/screens/Music.cpp
+index 3fa2a8c938..a534b70061 100644
+--- a/src/displayapp/screens/Music.cpp
++++ b/src/displayapp/screens/Music.cpp
+@@ -48,8 +48,8 @@ inline void lv_img_set_src_arr(lv_obj_t* img, const lv_img_dsc_t* src_img) {
+  *
+  * TODO: Investigate Apple Media Service and AVRCPv1.6 support for seamless integration
+  */
+-Music::Music(Pinetime::Controllers::MusicService& music, Pinetime::Controllers::MotorController& motor)
+-  : musicService(music), motor(motor) {
++Music::Music(Pinetime::Controllers::MusicService& music)
++  : musicService(music){
+   lv_obj_t* label;
+ 
+   lv_style_init(&btn_style);
+diff --git a/src/displayapp/screens/Music.h b/src/displayapp/screens/Music.h
+index 924931f3df..522533215b 100644
+--- a/src/displayapp/screens/Music.h
++++ b/src/displayapp/screens/Music.h
+@@ -34,7 +34,7 @@ namespace Pinetime {
+     namespace Screens {
+       class Music : public Screen {
+       public:
+-        Music(Pinetime::Controllers::MusicService& music, Pinetime::Controllers::MotorController& motor);
++        Music(Pinetime::Controllers::MusicService& music);
+ 
+         ~Music() override;
+ 
+@@ -82,8 +82,6 @@ namespace Pinetime {
+ 
+         lv_task_t* taskRefresh;
+ 
+-        Controllers::MotorController& motor;
+-
+         /** Watchapp */
+       };
+     }
+@@ -94,7 +92,7 @@ namespace Pinetime {
+       static constexpr const char* icon = Screens::Symbols::music;
+ 
+       static Screens::Screen* Create(AppControllers& controllers) {
+-        return new Screens::Music(*controllers.musicService, controllers.motorController);
++        return new Screens::Music(*controllers.musicService);
+       };
+     };
+   }
+
+From 29cc0eb21525f7aa9674717612cb015fdaa5d7b8 Mon Sep 17 00:00:00 2001
+From: Titus Kendzorra <titus@kendzorra.de>
+Date: Wed, 14 May 2025 18:53:10 +0200
+Subject: [PATCH 08/16] formatting
+
+---
+ src/displayapp/screens/Music.cpp | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/src/displayapp/screens/Music.cpp b/src/displayapp/screens/Music.cpp
+index a534b70061..29b8e45688 100644
+--- a/src/displayapp/screens/Music.cpp
++++ b/src/displayapp/screens/Music.cpp
+@@ -48,8 +48,7 @@ inline void lv_img_set_src_arr(lv_obj_t* img, const lv_img_dsc_t* src_img) {
+  *
+  * TODO: Investigate Apple Media Service and AVRCPv1.6 support for seamless integration
+  */
+-Music::Music(Pinetime::Controllers::MusicService& music)
+-  : musicService(music){
++Music::Music(Pinetime::Controllers::MusicService& music) : musicService(music) {
+   lv_obj_t* label;
+ 
+   lv_style_init(&btn_style);
+
+From 18894a6e0348dfd0c0cdd8b0dffb1f6b04e1b264 Mon Sep 17 00:00:00 2001
+From: Titus Kendzorra <titus@kendzorra.de>
+Date: Fri, 30 May 2025 15:39:38 +0200
+Subject: [PATCH 09/16] removed accidental change
+
+---
+ .vscode/settings.json | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/.vscode/settings.json b/.vscode/settings.json
+index 70643b0798..a7b04eea3c 100644
+--- a/.vscode/settings.json
++++ b/.vscode/settings.json
+@@ -65,8 +65,6 @@
+         "stdexcept": "cpp",
+         "streambuf": "cpp",
+         "cinttypes": "cpp",
+-        "typeinfo": "cpp",
+-        "ios": "cpp",
+-        "disc.c": "cpp"
++        "typeinfo": "cpp"
+     }
+ }
+
+From cbc9625aa9706dae414936fa4ea002ac3dc333de Mon Sep 17 00:00:00 2001
+From: Titus Kendzorra <titus@kendzorra.de>
+Date: Sat, 7 Jun 2025 00:33:01 +0200
+Subject: [PATCH 10/16] correct color of the buttons
+
+---
+ src/displayapp/screens/Music.cpp | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/src/displayapp/screens/Music.cpp b/src/displayapp/screens/Music.cpp
+index 29b8e45688..0bd0965ff9 100644
+--- a/src/displayapp/screens/Music.cpp
++++ b/src/displayapp/screens/Music.cpp
+@@ -54,7 +54,6 @@ Music::Music(Pinetime::Controllers::MusicService& music) : musicService(music) {
+   lv_style_init(&btn_style);
+   lv_style_set_radius(&btn_style, LV_STATE_DEFAULT, 20);
+   lv_style_set_bg_color(&btn_style, LV_STATE_DEFAULT, Colors::bgAlt);
+-  lv_style_set_bg_opa(&btn_style, LV_STATE_DEFAULT, LV_OPA_50);
+ 
+   btnVolDown = lv_btn_create(lv_scr_act(), nullptr);
+   btnVolDown->user_data = this;
+
+From e44aac1f25117e17c485bc498e9427e8e88bb86f Mon Sep 17 00:00:00 2001
+From: Titus Kendzorra <titus@kendzorra.de>
+Date: Thu, 12 Jun 2025 17:33:29 +0200
+Subject: [PATCH 11/16] remove redundant initialisers for trackName and
+ albumName
+
+---
+ src/components/ble/MusicService.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/components/ble/MusicService.h b/src/components/ble/MusicService.h
+index 9257e13514..e32980b42c 100644
+--- a/src/components/ble/MusicService.h
++++ b/src/components/ble/MusicService.h
+@@ -71,8 +71,8 @@ namespace Pinetime {
+ 
+       uint16_t eventHandle {};
+ 
+-      std::string trackName {""};
+-      std::string albumName {""};
++      std::string trackName;
++      std::string albumName;
+       std::string artistName {"Not Playing"};
+ 
+       bool playing {false};
+
+From ef74a001d320cd1bab7bb29afaa474c5362e0f37 Mon Sep 17 00:00:00 2001
+From: Titus Kendzorra <titus@kendzorra.de>
+Date: Sat, 26 Jul 2025 18:47:59 +0200
+Subject: [PATCH 12/16] add progress bar
+
+---
+ .vscode/settings.json            |   3 +-
+ src/displayapp/screens/Music.cpp | 103 +++++++++++++++++++++++--------
+ src/displayapp/screens/Music.h   |  17 ++++-
+ 3 files changed, 94 insertions(+), 29 deletions(-)
+
+diff --git a/.vscode/settings.json b/.vscode/settings.json
+index a7b04eea3c..f0414bac40 100644
+--- a/.vscode/settings.json
++++ b/.vscode/settings.json
+@@ -65,6 +65,7 @@
+         "stdexcept": "cpp",
+         "streambuf": "cpp",
+         "cinttypes": "cpp",
+-        "typeinfo": "cpp"
++        "typeinfo": "cpp",
++        "disc_f_1.c": "cpp"
+     }
+ }
+diff --git a/src/displayapp/screens/Music.cpp b/src/displayapp/screens/Music.cpp
+index 0bd0965ff9..ace12f2638 100644
+--- a/src/displayapp/screens/Music.cpp
++++ b/src/displayapp/screens/Music.cpp
+@@ -24,6 +24,7 @@
+ #include "displayapp/icons/music/disc_f_1.c"
+ #include "displayapp/icons/music/disc_f_2.c"
+ #include "displayapp/InfiniTimeTheme.h"
++#include "components/ble/BleController.h"
+ 
+ using namespace Pinetime::Applications::Screens;
+ 
+@@ -48,7 +49,7 @@ inline void lv_img_set_src_arr(lv_obj_t* img, const lv_img_dsc_t* src_img) {
+  *
+  * TODO: Investigate Apple Media Service and AVRCPv1.6 support for seamless integration
+  */
+-Music::Music(Pinetime::Controllers::MusicService& music) : musicService(music) {
++Music::Music(Pinetime::Controllers::MusicService& music, const Controllers::Ble& bleController): musicService(music), bleController {bleController}{
+   lv_obj_t* label;
+ 
+   lv_style_init(&btn_style);
+@@ -102,19 +103,12 @@ Music::Music(Pinetime::Controllers::MusicService& music) : musicService(music) {
+   txtPlayPause = lv_label_create(btnPlayPause, nullptr);
+   lv_label_set_text_static(txtPlayPause, Symbols::play);
+ 
+-  txtTrackDuration = lv_label_create(lv_scr_act(), nullptr);
+-  lv_label_set_long_mode(txtTrackDuration, LV_LABEL_LONG_SROLL);
+-  lv_obj_align(txtTrackDuration, nullptr, LV_ALIGN_IN_TOP_LEFT, 12, 20);
+-  lv_label_set_text_static(txtTrackDuration, "--:--/--:--");
+-  lv_label_set_align(txtTrackDuration, LV_ALIGN_IN_LEFT_MID);
+-  lv_obj_set_width(txtTrackDuration, LV_HOR_RES);
+-
+   constexpr uint8_t FONT_HEIGHT = 12;
+   constexpr uint8_t LINE_PAD = 15;
+   constexpr int8_t MIDDLE_OFFSET = -25;
+   txtArtist = lv_label_create(lv_scr_act(), nullptr);
+   lv_label_set_long_mode(txtArtist, LV_LABEL_LONG_SROLL_CIRC);
+-  lv_obj_align(txtArtist, nullptr, LV_ALIGN_IN_LEFT_MID, 12, MIDDLE_OFFSET + 2 * FONT_HEIGHT + LINE_PAD);
++  lv_obj_align(txtArtist, nullptr, LV_ALIGN_IN_LEFT_MID, 0, (MIDDLE_OFFSET - 45) + 2 * FONT_HEIGHT + LINE_PAD);
+   lv_label_set_align(txtArtist, LV_ALIGN_IN_LEFT_MID);
+   lv_obj_set_width(txtArtist, LV_HOR_RES - 12);
+   lv_label_set_text_static(txtArtist, "");
+@@ -122,19 +116,53 @@ Music::Music(Pinetime::Controllers::MusicService& music) : musicService(music) {
+ 
+   txtTrack = lv_label_create(lv_scr_act(), nullptr);
+   lv_label_set_long_mode(txtTrack, LV_LABEL_LONG_SROLL_CIRC);
+-  lv_obj_align(txtTrack, nullptr, LV_ALIGN_IN_LEFT_MID, 12, MIDDLE_OFFSET + 1 * FONT_HEIGHT);
++  lv_obj_align(txtTrack, nullptr, LV_ALIGN_IN_LEFT_MID, 0, (MIDDLE_OFFSET - 45) + 1 * FONT_HEIGHT);
+   lv_label_set_align(txtTrack, LV_ALIGN_IN_LEFT_MID);
+   lv_obj_set_width(txtTrack, LV_HOR_RES - 12);
+   lv_label_set_text_static(txtTrack, "");
+ 
+-  /** Init animation */
++  barTrackDuration = lv_bar_create(lv_scr_act(), nullptr);
++  lv_obj_set_style_local_bg_color(barTrackDuration, LV_BAR_PART_BG, LV_STATE_DEFAULT, Colors::bgAlt);
++  lv_obj_set_style_local_bg_color(barTrackDuration, LV_BAR_PART_INDIC, LV_STATE_DEFAULT, Colors::lightGray);
++  lv_obj_set_style_local_bg_opa(barTrackDuration, LV_BAR_PART_BG, LV_STATE_DEFAULT, LV_OPA_100);
++  lv_obj_set_style_local_radius(barTrackDuration, LV_BAR_PART_BG, LV_STATE_DEFAULT, LV_RADIUS_CIRCLE);
++  lv_obj_set_size(barTrackDuration, 240, 10);
++  lv_obj_align(barTrackDuration, nullptr, LV_ALIGN_CENTER, 0, 5);
++  lv_bar_set_range(barTrackDuration, 0, 1000);
++  lv_bar_set_value(barTrackDuration, 0, LV_ANIM_OFF);
++
++  txtCurrentPosition = lv_label_create(lv_scr_act(), nullptr);
++  lv_label_set_long_mode(txtCurrentPosition, LV_LABEL_LONG_SROLL);
++  lv_obj_align(txtCurrentPosition, nullptr, LV_ALIGN_IN_LEFT_MID, 0, 25);
++  lv_label_set_text_static(txtCurrentPosition, "--:--");
++  lv_label_set_align(txtCurrentPosition, LV_ALIGN_IN_LEFT_MID);
++  lv_obj_set_width(txtCurrentPosition, LV_HOR_RES);
++  lv_obj_set_style_local_text_color(txtCurrentPosition, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::lightGray);
++
++  txtTrackDuration = lv_label_create(lv_scr_act(), nullptr);
++  lv_label_set_long_mode(txtTrackDuration, LV_LABEL_LONG_SROLL);
++  lv_obj_align(txtTrackDuration, nullptr, LV_ALIGN_IN_RIGHT_MID, -13, 25);
++  lv_label_set_text_static(txtTrackDuration, "--:--");
++  lv_label_set_align(txtTrackDuration, LV_ALIGN_IN_RIGHT_MID);
++  lv_obj_set_width(txtTrackDuration, LV_HOR_RES);
++  lv_obj_set_style_local_text_color(txtTrackDuration, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::lightGray);
++
++  bluetoothInfo = lv_label_create(lv_scr_act(), nullptr);
++  lv_label_set_text_fmt(bluetoothInfo, "%s ???", Screens::Symbols::bluetooth);
++  lv_obj_set_style_local_text_color(bluetoothInfo, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::bgAlt);
++  lv_obj_align(bluetoothInfo, nullptr, LV_ALIGN_IN_TOP_MID, 0, 0);
++  lv_obj_set_auto_realign(bluetoothInfo, true);
++
++
++  /* Init animation
+   imgDisc = lv_img_create(lv_scr_act(), nullptr);
+   lv_img_set_src_arr(imgDisc, &disc);
+-  lv_obj_align(imgDisc, nullptr, LV_ALIGN_IN_TOP_RIGHT, -15, 15);
++  lv_obj_align(imgDisc, nullptr, LV_ALIGN_IN_TOP_RIGHT, 0, 0);
+ 
+   imgDiscAnim = lv_img_create(lv_scr_act(), nullptr);
+   lv_img_set_src_arr(imgDiscAnim, &disc_f_1);
+-  lv_obj_align(imgDiscAnim, nullptr, LV_ALIGN_IN_TOP_RIGHT, -15 - 32, 15);
++  lv_obj_align(imgDiscAnim, nullptr, LV_ALIGN_IN_TOP_RIGHT, 0 - 32, 0);
++  */
+ 
+   frameB = false;
+ 
+@@ -178,16 +206,27 @@ void Music::Refresh() {
+     UpdateLength();
+   }
+ 
++  bleState = bleController.IsConnected();
++  bleRadioEnabled = bleController.IsRadioEnabled();
++  if (bleState.IsUpdated() || bleRadioEnabled.IsUpdated()) {
++    if (bleState.Get() == false) {
++      lv_label_set_text_fmt(bluetoothInfo, "%s Disconnected", Screens::Symbols::bluetooth);
++    } else {
++    lv_label_set_text_fmt(bluetoothInfo, "%s Connected", Screens::Symbols::bluetooth);
++    }
++  }
++
+   if (playing) {
+     lv_label_set_text_static(txtPlayPause, Symbols::pause);
+     if (xTaskGetTickCount() - 1024 >= lastIncrement) {
+ 
+-      if (frameB) {
++      /*if (frameB) {
+         lv_img_set_src(imgDiscAnim, &disc_f_1);
+       } else {
+         lv_img_set_src(imgDiscAnim, &disc_f_2);
+       }
+       frameB = !frameB;
++      */
+ 
+       if (currentPosition >= totalLength) {
+         // Let's assume the getTrack finished, paused when the timer ends
+@@ -202,22 +241,36 @@ void Music::Refresh() {
+ }
+ 
+ void Music::UpdateLength() {
++  int remaining = totalLength - currentPosition;
++  if (remaining < 0) remaining = 0;
++
+   if (totalLength > (99 * 60 * 60)) {
+-    lv_label_set_text_static(txtTrackDuration, "Inf/Inf");
++    lv_label_set_text_static(txtCurrentPosition, "Inf");
++    lv_label_set_text_static(txtTrackDuration, "Inf");
+   } else if (totalLength > (99 * 60)) {
+-    lv_label_set_text_fmt(txtTrackDuration,
+-                          "%02d:%02d/%02d:%02d",
++    lv_label_set_text_fmt(txtCurrentPosition,
++                          "%d:%02d",
+                           (currentPosition / (60 * 60)) % 100,
+-                          ((currentPosition % (60 * 60)) / 60) % 100,
+-                          (totalLength / (60 * 60)) % 100,
+-                          ((totalLength % (60 * 60)) / 60) % 100);
+-  } else {
++                          ((currentPosition % (60 * 60)) / 60) % 100);
++
+     lv_label_set_text_fmt(txtTrackDuration,
+-                          "%02d:%02d/%02d:%02d",
++                          "-%d:%02d",
++                          (remaining / (60 * 60)) % 100,
++                          ((remaining % (60 * 60)) / 60) % 100);
++    lv_bar_set_range(barTrackDuration, 0, totalLength > 0 ? totalLength : 1);
++    lv_bar_set_value(barTrackDuration, currentPosition, LV_ANIM_OFF);
++  } else {
++    lv_label_set_text_fmt(txtCurrentPosition,
++                          "%d:%02d",
+                           (currentPosition / 60) % 100,
+-                          (currentPosition % 60) % 100,
+-                          (totalLength / 60) % 100,
+-                          (totalLength % 60) % 100);
++                          (currentPosition % 60) % 100);
++
++    lv_label_set_text_fmt(txtTrackDuration,
++                          "-%d:%02d",
++                          (remaining / 60) % 100,
++                          (remaining % 60) % 100);
++    lv_bar_set_range(barTrackDuration, 0, totalLength);
++    lv_bar_set_value(barTrackDuration, currentPosition, LV_ANIM_OFF);
+   }
+ }
+ 
+diff --git a/src/displayapp/screens/Music.h b/src/displayapp/screens/Music.h
+index 522533215b..c801ae9773 100644
+--- a/src/displayapp/screens/Music.h
++++ b/src/displayapp/screens/Music.h
+@@ -24,6 +24,8 @@
+ #include "displayapp/apps/Apps.h"
+ #include "displayapp/Controllers.h"
+ #include "Symbols.h"
++#include "components/ble/BleController.h"
++#include "utility/DirtyValue.h"
+ 
+ namespace Pinetime {
+   namespace Controllers {
+@@ -34,7 +36,7 @@ namespace Pinetime {
+     namespace Screens {
+       class Music : public Screen {
+       public:
+-        Music(Pinetime::Controllers::MusicService& music);
++        Music(Pinetime::Controllers::MusicService& music, const Controllers::Ble& bleController);
+ 
+         ~Music() override;
+ 
+@@ -55,17 +57,22 @@ namespace Pinetime {
+         lv_obj_t* txtArtist;
+         lv_obj_t* txtTrack;
+         lv_obj_t* txtPlayPause;
++        lv_obj_t* bluetoothInfo;
+ 
+         lv_obj_t* imgDisc;
+         lv_obj_t* imgDiscAnim;
+         lv_obj_t* txtTrackDuration;
++        lv_obj_t* txtCurrentPosition;
++        lv_obj_t* barTrackDuration;
++
+ 
+         lv_style_t btn_style;
+ 
+         /** For the spinning disc animation */
+         bool frameB;
+ 
+-        Pinetime::Controllers::MusicService& musicService;
++        Pinetime::Controllers::MusicService& musicService;        
++        const Controllers::Ble& bleController;
+ 
+         std::string artist;
+         std::string album;
+@@ -82,6 +89,9 @@ namespace Pinetime {
+ 
+         lv_task_t* taskRefresh;
+ 
++        Utility::DirtyValue<bool> bleState {};
++        Utility::DirtyValue<bool> bleRadioEnabled {};
++
+         /** Watchapp */
+       };
+     }
+@@ -92,7 +102,8 @@ namespace Pinetime {
+       static constexpr const char* icon = Screens::Symbols::music;
+ 
+       static Screens::Screen* Create(AppControllers& controllers) {
+-        return new Screens::Music(*controllers.musicService);
++        return new Screens::Music(*controllers.musicService,
++                                   controllers.bleController);
+       };
+     };
+   }
+
+From fcea150959e429bbfff0aa8b76fe4e6b1957514a Mon Sep 17 00:00:00 2001
+From: Titus <154823939+tituscmd@users.noreply.github.com>
+Date: Sat, 26 Jul 2025 21:19:38 +0200
+Subject: [PATCH 13/16] Update settings.json
+
+---
+ .vscode/settings.json | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/.vscode/settings.json b/.vscode/settings.json
+index f0414bac40..a7b04eea3c 100644
+--- a/.vscode/settings.json
++++ b/.vscode/settings.json
+@@ -65,7 +65,6 @@
+         "stdexcept": "cpp",
+         "streambuf": "cpp",
+         "cinttypes": "cpp",
+-        "typeinfo": "cpp",
+-        "disc_f_1.c": "cpp"
++        "typeinfo": "cpp"
+     }
+ }
+
+From 052dad29a229081d774f43de379eb0adc990bdd6 Mon Sep 17 00:00:00 2001
+From: Titus Kendzorra <titus@kendzorra.de>
+Date: Mon, 28 Jul 2025 22:43:27 +0200
+Subject: [PATCH 14/16] formatting
+
+---
+ src/displayapp/screens/Music.cpp | 30 +++++++++---------------------
+ src/displayapp/screens/Music.h   |  3 +--
+ 2 files changed, 10 insertions(+), 23 deletions(-)
+
+diff --git a/src/displayapp/screens/Music.cpp b/src/displayapp/screens/Music.cpp
+index ace12f2638..bbbf4f8cd1 100644
+--- a/src/displayapp/screens/Music.cpp
++++ b/src/displayapp/screens/Music.cpp
+@@ -49,7 +49,8 @@ inline void lv_img_set_src_arr(lv_obj_t* img, const lv_img_dsc_t* src_img) {
+  *
+  * TODO: Investigate Apple Media Service and AVRCPv1.6 support for seamless integration
+  */
+-Music::Music(Pinetime::Controllers::MusicService& music, const Controllers::Ble& bleController): musicService(music), bleController {bleController}{
++Music::Music(Pinetime::Controllers::MusicService& music, const Controllers::Ble& bleController)
++  : musicService(music), bleController {bleController}{
+   lv_obj_t* label;
+ 
+   lv_style_init(&btn_style);
+@@ -212,7 +213,7 @@ void Music::Refresh() {
+     if (bleState.Get() == false) {
+       lv_label_set_text_fmt(bluetoothInfo, "%s Disconnected", Screens::Symbols::bluetooth);
+     } else {
+-    lv_label_set_text_fmt(bluetoothInfo, "%s Connected", Screens::Symbols::bluetooth);
++      lv_label_set_text_fmt(bluetoothInfo, "%s Connected", Screens::Symbols::bluetooth);
+     }
+   }
+ 
+@@ -242,33 +243,20 @@ void Music::Refresh() {
+ 
+ void Music::UpdateLength() {
+   int remaining = totalLength - currentPosition;
+-  if (remaining < 0) remaining = 0;
++  if (remaining < 0)
++    remaining = 0;
+ 
+   if (totalLength > (99 * 60 * 60)) {
+     lv_label_set_text_static(txtCurrentPosition, "Inf");
+     lv_label_set_text_static(txtTrackDuration, "Inf");
+   } else if (totalLength > (99 * 60)) {
+-    lv_label_set_text_fmt(txtCurrentPosition,
+-                          "%d:%02d",
+-                          (currentPosition / (60 * 60)) % 100,
+-                          ((currentPosition % (60 * 60)) / 60) % 100);
+-
+-    lv_label_set_text_fmt(txtTrackDuration,
+-                          "-%d:%02d",
+-                          (remaining / (60 * 60)) % 100,
+-                          ((remaining % (60 * 60)) / 60) % 100);
++    lv_label_set_text_fmt(txtCurrentPosition, "%d:%02d", (currentPosition / (60 * 60)) % 100, ((currentPosition % (60 * 60)) / 60) % 100);
++    lv_label_set_text_fmt(txtTrackDuration, "-%d:%02d", (remaining / (60 * 60)) % 100, ((remaining % (60 * 60)) / 60) % 100);
+     lv_bar_set_range(barTrackDuration, 0, totalLength > 0 ? totalLength : 1);
+     lv_bar_set_value(barTrackDuration, currentPosition, LV_ANIM_OFF);
+   } else {
+-    lv_label_set_text_fmt(txtCurrentPosition,
+-                          "%d:%02d",
+-                          (currentPosition / 60) % 100,
+-                          (currentPosition % 60) % 100);
+-
+-    lv_label_set_text_fmt(txtTrackDuration,
+-                          "-%d:%02d",
+-                          (remaining / 60) % 100,
+-                          (remaining % 60) % 100);
++    lv_label_set_text_fmt(txtCurrentPosition, "%d:%02d", (currentPosition / 60) % 100, (currentPosition % 60) % 100);
++    lv_label_set_text_fmt(txtTrackDuration, "-%d:%02d", (remaining / 60) % 100, (remaining % 60) % 100);
+     lv_bar_set_range(barTrackDuration, 0, totalLength);
+     lv_bar_set_value(barTrackDuration, currentPosition, LV_ANIM_OFF);
+   }
+diff --git a/src/displayapp/screens/Music.h b/src/displayapp/screens/Music.h
+index c801ae9773..e94fe8db3b 100644
+--- a/src/displayapp/screens/Music.h
++++ b/src/displayapp/screens/Music.h
+@@ -102,8 +102,7 @@ namespace Pinetime {
+       static constexpr const char* icon = Screens::Symbols::music;
+ 
+       static Screens::Screen* Create(AppControllers& controllers) {
+-        return new Screens::Music(*controllers.musicService,
+-                                   controllers.bleController);
++        return new Screens::Music(*controllers.musicService, controllers.bleController);
+       };
+     };
+   }
+
+From 65ae1293b0454edcd2f69ca4a03f5f446ce1f14f Mon Sep 17 00:00:00 2001
+From: Titus Kendzorra <titus@kendzorra.de>
+Date: Mon, 28 Jul 2025 22:48:36 +0200
+Subject: [PATCH 15/16] formatting
+
+---
+ src/displayapp/screens/Music.cpp | 2 +-
+ src/displayapp/screens/Music.h   | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/displayapp/screens/Music.cpp b/src/displayapp/screens/Music.cpp
+index c8b9079f63..39be58c0b4 100644
+--- a/src/displayapp/screens/Music.cpp
++++ b/src/displayapp/screens/Music.cpp
+@@ -51,7 +51,7 @@ inline void lv_img_set_src_arr(lv_obj_t* img, const lv_img_dsc_t* src_img) {
+  * TODO: Investigate Apple Media Service and AVRCPv1.6 support for seamless integration
+  */
+ Music::Music(Pinetime::Controllers::MusicService& music, const Controllers::Ble& bleController)
+-  : musicService(music), bleController {bleController}{
++  : musicService(music), bleController {bleController} {
+   lv_obj_t* label;
+ 
+   lv_style_init(&btn_style);
+diff --git a/src/displayapp/screens/Music.h b/src/displayapp/screens/Music.h
+index f8e8c9f05f..f4504c2f58 100644
+--- a/src/displayapp/screens/Music.h
++++ b/src/displayapp/screens/Music.h
+@@ -71,7 +71,7 @@ namespace Pinetime {
+         /** For the spinning disc animation */
+         bool frameB;
+ 
+-        Pinetime::Controllers::MusicService& musicService;        
++        Pinetime::Controllers::MusicService& musicService;
+         const Controllers::Ble& bleController;
+ 
+         std::string artist;
+
+From ed30e539fdf2b0dfa2a312deb227ef1ac648b60f Mon Sep 17 00:00:00 2001
+From: Titus Kendzorra <titus@kendzorra.de>
+Date: Tue, 29 Jul 2025 00:16:44 +0200
+Subject: [PATCH 16/16] more formatting
+
+---
+ src/displayapp/screens/Music.cpp | 1 -
+ src/displayapp/screens/Music.h   | 1 -
+ 2 files changed, 2 deletions(-)
+
+diff --git a/src/displayapp/screens/Music.cpp b/src/displayapp/screens/Music.cpp
+index 39be58c0b4..52538cf6ac 100644
+--- a/src/displayapp/screens/Music.cpp
++++ b/src/displayapp/screens/Music.cpp
+@@ -26,7 +26,6 @@
+ #include "displayapp/InfiniTimeTheme.h"
+ #include "components/ble/BleController.h"
+ 
+-
+ using namespace Pinetime::Applications::Screens;
+ 
+ static void event_handler(lv_obj_t* obj, lv_event_t event) {
+diff --git a/src/displayapp/screens/Music.h b/src/displayapp/screens/Music.h
+index f4504c2f58..7d60f6c8e8 100644
+--- a/src/displayapp/screens/Music.h
++++ b/src/displayapp/screens/Music.h
+@@ -65,7 +65,6 @@ namespace Pinetime {
+         lv_obj_t* txtCurrentPosition;
+         lv_obj_t* barTrackDuration;
+ 
+-
+         lv_style_t btn_style;
+ 
+         /** For the spinning disc animation */

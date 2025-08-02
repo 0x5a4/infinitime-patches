@@ -1,0 +1,22 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 3250982..6bae865 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -34,16 +34,7 @@ endif()
+ set(TARGET_DEVICE "PINETIME" CACHE STRING "Target device")
+ set_property(CACHE TARGET_DEVICE PROPERTY STRINGS PINETIME MOY_TFK5 MOY_TIN5 MOY_TON5 MOY_UNK)
+ 
+-set(PROJECT_GIT_COMMIT_HASH "")
+-
+-execute_process(COMMAND git rev-parse --short HEAD
+-                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+-                OUTPUT_VARIABLE PROJECT_GIT_COMMIT_HASH
+-                RESULT_VARIABLE PROJECT_GIT_COMMIT_HASH_SUCCESS)
+-
+-string(STRIP "${PROJECT_GIT_COMMIT_HASH}" PROJECT_GIT_COMMIT_HASH)
+-
+-message("PROJECT_GIT_COMMIT_HASH_SUCCESS? " ${PROJECT_GIT_COMMIT_HASH_SUCCESS})
++set(PROJECT_GIT_COMMIT_HASH "deadbeef")
+ 
+ message("")
+ message("BUILD CONFIGURATION")

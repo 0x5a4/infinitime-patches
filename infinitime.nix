@@ -11,6 +11,9 @@
   fetchFromGitHub,
   buildResources ? true,
   buildDfu ? true,
+  userApps ? null,
+  watchFaces ? null,
+  patches ? [ ],
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "infinitime";
@@ -23,6 +26,8 @@ stdenv.mkDerivation (finalAttrs: {
     hash = "sha256-FLXMaXqn+SOPC+ft7Ee3Gf7mUnb76dcZcJrXbUDOnZ0=";
     fetchSubmodules = true;
   };
+
+  inherit patches;
 
   nativeBuildInputs =
     [
@@ -48,12 +53,18 @@ stdenv.mkDerivation (finalAttrs: {
   dontFixCmake = true;
 
   cmakeFlags =
-    [
+    lib.concatLists [
+      (lib.optional buildResources "-DBUILD_RESOURCES=1")
+      (lib.optional buildDfu "-DBUILD_DFU=1")
+      (lib.optional (userApps != null) ''-DENABLE_USERAPPS=${(lib.concatStringsSep "," userApps)}'')
+      (lib.optional (
+        watchFaces != null
+      ) ''-DENABLE_WATCHFACES=${(lib.concatStringsSep "," watchFaces)}'')
+    ]
+    ++ [
       "-DARM_NONE_EABI_TOOLCHAIN_PATH=${gcc-arm-embedded-10}"
       "-DNRF5_SDK_PATH=${nrf5-sdk}"
-    ]
-    ++ lib.optional buildResources "-DBUILD_RESOURCES=1"
-    ++ lib.optional buildDfu "-DBUILD_DFU=1";
+    ];
 
   installPhase =
     ''

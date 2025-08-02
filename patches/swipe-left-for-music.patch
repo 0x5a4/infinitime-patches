@@ -1,0 +1,33 @@
+diff --git a/src/displayapp/DisplayApp.cpp b/src/displayapp/DisplayApp.cpp
+index b1594f19..d468c9d9 100644
+--- a/src/displayapp/DisplayApp.cpp
++++ b/src/displayapp/DisplayApp.cpp
+@@ -420,6 +420,9 @@ void DisplayApp::Refresh() {
+               case TouchEvents::SwipeRight:
+                 LoadNewScreen(Apps::QuickSettings, DisplayApp::FullRefreshDirections::RightAnim);
+                 break;
++              case TouchEvents::SwipeLeft:
++                LoadNewScreen(Apps::Music, DisplayApp::FullRefreshDirections::LeftAnim);
++                break;
+               case TouchEvents::DoubleTap:
+                 PushMessageToSystemTask(System::Messages::GoToSleep);
+                 break;
+diff --git a/src/displayapp/screens/Music.cpp b/src/displayapp/screens/Music.cpp
+index 0763da0f..45c2fb30 100644
+--- a/src/displayapp/screens/Music.cpp
++++ b/src/displayapp/screens/Music.cpp
+@@ -268,14 +268,6 @@ bool Music::OnTouchEvent(Pinetime::Applications::TouchEvents event) {
+       }
+       return false;
+     }
+-    case TouchEvents::SwipeLeft: {
+-      musicService.event(Controllers::MusicService::EVENT_MUSIC_NEXT);
+-      return true;
+-    }
+-    case TouchEvents::SwipeRight: {
+-      musicService.event(Controllers::MusicService::EVENT_MUSIC_PREV);
+-      return true;
+-    }
+     default: {
+       return false;
+     }

@@ -28,7 +28,40 @@
         packages = rec {
           nrf5-sdk = pkgs.callPackage ./nrf5-sdk.nix { };
           infinitime = pkgs.callPackage ./infinitime.nix { inherit nrf5-sdk; };
-          default = infinitime;
+
+          infinitime-patched = infinitime.override {
+            userApps = [
+              # page 1
+              "Apps::StopWatch"
+              "Apps::Alarm"
+              "Apps::Timer"
+              "Apps::Music"
+              "Apps::Steps"
+              "Apps::Weather"
+              # page 2
+              "Apps::HeartRate"
+              "Apps::Paint"
+              "Apps::Paddle"
+              "Apps::Twos"
+              "Apps::Dice"
+              "Apps::Navigation"
+              # page 3
+              "Apps::Metronome"
+            ];
+            watchFaces = [ "WatchFace::Terminal" ];
+            patches = [
+              ./patches/fixed-commit-hash.patch
+              ./patches/music-redesign-2337.patch
+              ./patches/swipe-left-for-music.patch
+
+              (pkgs.fetchpatch {
+                url = "https://patch-diff.githubusercontent.com/raw/InfiniTimeOrg/InfiniTime/pull/2319.patch";
+                hash = "sha256-8mrqLlkDsB//ItVpxDRPlfmEhdUv9u41PgbKLFWInPY=";
+              })
+            ];
+          };
+
+          default = infinitime-patched;
         };
       }
     );
