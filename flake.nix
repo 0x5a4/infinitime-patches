@@ -26,8 +26,8 @@
       in
       {
         packages = rec {
-          nrf5-sdk = pkgs.callPackage ./nrf5-sdk.nix { };
-          infinitime = pkgs.callPackage ./infinitime.nix { inherit nrf5-sdk; };
+          nrf5-sdk = pkgs.callPackage ./pkgs/nrf5-sdk.nix { };
+          infinitime = pkgs.callPackage ./pkgs/infinitime.nix { inherit nrf5-sdk; };
 
           infinitime-patched = infinitime.override {
             userApps = [
@@ -35,7 +35,7 @@
               "Apps::StopWatch"
               "Apps::Alarm"
               "Apps::Timer"
-              "Apps::Music"
+              "Apps::Tally"
               "Apps::Steps"
               "Apps::Weather"
               # page 2
@@ -47,17 +47,24 @@
               "Apps::Navigation"
               # page 3
               "Apps::Metronome"
+              "Apps::Music"
             ];
             watchFaces = [ "WatchFace::Terminal" ];
             patches = [
               ./patches/fixed-commit-hash.patch
               ./patches/music-redesign-2337.patch
               ./patches/swipe-left-for-music.patch
+              ./patches/open-battery-when-charging-1876.patch
 
+              # watch face stuff
               (pkgs.fetchpatch {
                 url = "https://patch-diff.githubusercontent.com/raw/InfiniTimeOrg/InfiniTime/pull/2319.patch";
                 hash = "sha256-8mrqLlkDsB//ItVpxDRPlfmEhdUv9u41PgbKLFWInPY=";
               })
+              ./patches/german-date.patch
+
+              # counter app
+              ./patches/tally-2320.patch
             ];
           };
 
